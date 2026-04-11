@@ -17,13 +17,12 @@ st.set_page_config(
 st.markdown("""
     <style>
     .main {
-        background-color: #f5f7f9;
+        background-color: transparent;
     }
-    .stMetric {
-        background-color: #ffffff;
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    /* Remove the hardcoded white background from metrics to let Streamlit's theme handle it */
+    div[data-testid="stMetric"] {
+        background-color: transparent !important;
+        box-shadow: none !important;
     }
     </style>
     """, unsafe_allow_html=True)
