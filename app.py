@@ -32,8 +32,29 @@ st.markdown("""
 if 'forecaster' not in st.session_state:
     st.session_state.config = ForecastConfig()
     st.session_state.forecaster = FoodCPIForecaster(st.session_state.config)
-    # Pre-load data once
+    # Pre-load data and initial state
     st.session_state.forecaster.load_data()
+
+    # AUTO-LOAD FEATURE:
+    # If a saved model order exists in a table, we can use it to immediately fit the model
+    # Otherwise, we use the default from config.
+    try:
+        # We check if the model comparison table exists to see if we have a 'best' order from a previous run
+        table_path = os.path.join(st.session_state.config.tables_dir, "table3_model_comparison.csv")
+        if os.path.exists(table_path):
+            # Load the results and pick the best one (lowest AIC)
+            df_conv = pd.read_csv(table_path, index_col=0)
+            best_model_name = df_conv['AIC'].idxmin() # e.g., "ARIMA(2,2,2)"
+            order_str = best_model_name.replace("ARIMA(", "").replace(")", "").split(",")
+            best_order = tuple(map(int, order_str))
+            st.session_state.config.model_order = best_order
+            st.session_state.forecaster.best_order = best_order
+    except Exception as e:
+        st.session_state.forecaster.best_order = st.session_state.config.model_order
+
+    # Fit the model immediately on startup so the charts aren't empty
+    st.session_state.forecaster.estimate_model(auto_optimize=False)
+    st.session_state.forecaster.generate_forecast(steps=st.session_state.config.forecast_steps)
 
 forecaster = st.session_state.forecaster
 config = st.session_state.config
