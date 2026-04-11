@@ -46,10 +46,17 @@ class FoodCPIForecaster:
         self.logger.debug(f"Table saved to {path}")
 
     def _save_figure(self, fig: plt.Figure, filename: str):
-        # Make background transparent so it works in both Streamlit Light and Dark modes
-        fig.patch.set_alpha(0)
+        # Ensure figure and axes backgrounds are fully transparent for Streamlit Dark/Light mode
+        fig.patch.set_alpha(0.0)
+        if fig.canvas.get_renderer():
+             fig.canvas.set_facecolor('none')
+
         for ax in fig.get_axes():
             ax.set_facecolor('none')
+            ax.xaxis.label.set_color('#444444') # Neutral dark grey that works on both
+            ax.yaxis.label.set_color('#444444')
+            ax.tick_params(colors='#444444')
+            ax.title.set_color('#444444')
 
         path = os.path.join(self.cfg.figures_dir, filename.replace('.png', f'.{self.cfg.fig_format}'))
         fig.savefig(path, dpi=self.cfg.fig_dpi, bbox_inches='tight', transparent=True)
