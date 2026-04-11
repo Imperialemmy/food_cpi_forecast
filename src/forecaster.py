@@ -295,6 +295,10 @@ class FoodCPIForecaster:
     def run_diagnostics(self) -> Dict[str, Any]:
         self.logger.info("Phase E: Running residual diagnostic checks...")
 
+        if self.model_results is None:
+            self.logger.error("No model has been fitted. Please run estimate_model() first.")
+            raise RuntimeError("Model results are missing. You must call estimate_model() before run_diagnostics().")
+
         residuals = self.model_results.resid
 
         # Ljung-Box
