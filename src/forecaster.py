@@ -48,8 +48,9 @@ class FoodCPIForecaster:
     def _save_figure(self, fig: plt.Figure, filename: str):
         # Ensure figure and axes backgrounds are fully transparent for Streamlit Dark/Light mode
         fig.patch.set_alpha(0.0)
-        if fig.canvas.get_renderer():
-             fig.canvas.set_facecolor('none')
+
+        # Correct way to set figure facecolor for the Agg backend
+        fig.set_facecolor('none')
 
         for ax in fig.get_axes():
             ax.set_facecolor('none')
