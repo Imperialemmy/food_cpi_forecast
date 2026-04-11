@@ -46,8 +46,13 @@ class FoodCPIForecaster:
         self.logger.debug(f"Table saved to {path}")
 
     def _save_figure(self, fig: plt.Figure, filename: str):
+        # Make background transparent so it works in both Streamlit Light and Dark modes
+        fig.patch.set_alpha(0)
+        for ax in fig.get_axes():
+            ax.set_facecolor('none')
+
         path = os.path.join(self.cfg.figures_dir, filename.replace('.png', f'.{self.cfg.fig_format}'))
-        fig.savefig(path, dpi=self.cfg.fig_dpi, bbox_inches='tight')
+        fig.savefig(path, dpi=self.cfg.fig_dpi, bbox_inches='tight', transparent=True)
         plt.close(fig)
         self.logger.debug(f"Figure saved to {path}")
 
@@ -447,11 +452,11 @@ class FoodCPIForecaster:
         plt.style.use(self.cfg.fig_style)
 
         # Plot historical
-        ax.plot(self.series, label="Historical Food CPI", color='black')
+        ax.plot(self.series, label="Historical Food CPI", color='#2c3e50', linewidth=1.5)
 
         # Plot forecast
-        ax.plot(forecast_dates, forecast_values, label="ARIMA Forecast", color='blue', linewidth=2)
-        ax.fill_between(forecast_dates, conf_int.iloc[:, 0], conf_int.iloc[:, 1], color='blue', alpha=0.2, label="95% Confidence Interval")
+        ax.plot(forecast_dates, forecast_values, label="ARIMA Forecast", color='#007bff', linewidth=2)
+        ax.fill_between(forecast_dates, conf_int.iloc[:, 0], conf_int.iloc[:, 1], color='#007bff', alpha=0.2, label="95% Confidence Interval")
 
         ax.set_title(f"Nigeria Food CPI Forecast: ARIMA{self.best_order}")
         ax.set_ylabel("Index Value")
