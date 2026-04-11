@@ -1,3 +1,3 @@
-Lag,Q-statistic,df,p-value,Decision
-10,26.2156,6,0.0035,Reject H₀ — autocorrelation present ✗
-20,26.9549,16,0.1365,Fail to reject H₀ — white noise ✓
+Lag,Q-Stat,p-value
+10,26.21564838100351,0.0034607244164771207
+20,26.954932951136403,0.13653669110991984

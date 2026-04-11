@@ -1,4 +1,4 @@
-Series,ADF Statistic,ADF p-value,ADF CV 1%,ADF CV 5%,ADF CV 10%,ADF Lags,ADF Decision,KPSS Statistic,KPSS p-value,KPSS CV 1%,KPSS CV 5%,KPSS CV 10%,KPSS Lags,KPSS Decision,Joint Conclusion
-Level,1.5166,0.9976,-3.4711,-2.8794,-2.5763,14,Non-stationary (fail to reject H₀),1.5957,0.01,0.739,0.463,0.347,9,Non-stationary (reject H₀),Borderline — conservative: treat as non-stationary
-First Difference (d=1),4.039,1.0,-3.4711,-2.8794,-2.5763,13,Non-stationary (fail to reject H₀),1.3674,0.01,0.739,0.463,0.347,8,Non-stationary (reject H₀),Borderline — conservative: treat as non-stationary
-Second Difference (d=2),-2.6697,0.0794,-3.4716,-2.8797,-2.5764,14,Non-stationary (fail to reject H₀),0.4815,0.0458,0.739,0.463,0.347,25,Non-stationary (reject H₀),Borderline — conservative: treat as non-stationary
+Order,ADF Stat,ADF p-value,KPSS Stat,KPSS p-value,Stationary
+d=0,,,,,No (Constant)
+d=1,4.039020484911665,1.0,1.3674135632156426,0.01,No
+d=2,4.235384545261733,1.0,1.3597642000673462,0.01,No
