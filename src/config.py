@@ -9,11 +9,11 @@ class ForecastConfig:
     figures_dir: str = os.path.join("outputs", "figures")
     tables_dir: str = os.path.join("outputs", "tables")
 
-    # -- Data extraction parameters --------------------------------------------
+    # -- Data extraction parameters (NBS Defaults) ----------------------------------
     sheet_name: str = "Table2"
-    year_col: int = 0
-    month_col: int = 1
-    food_cpi_col: int = 7
+    default_year_col: int = 0
+    default_month_col: int = 1
+    default_food_cpi_col: int = 7
     data_row_start: int = 3
     pre2024_row_end: int = 351
     y2024_row_start: int = 351
