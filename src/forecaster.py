@@ -68,65 +68,80 @@ class FoodCPIForecaster:
     # Phase A: Data Loading & Preparation
     # --------------------------------------------------------------------------
 
-    def load_data(self) -> Tuple[pd.Series, pd.DataFrame]:
-        self.logger.info("Phase A: Loading and preparing NBS Food CPI data...")
+    def load_data(
+        self,
+        file_obj: Optional[Any] = None,
+        year_col: Optional[int] = None,
+        month_col: Optional[int] = None,
+        value_col: Optional[int] = None,
+        sheet_name: Optional[str] = None
+    ) -> Tuple[pd.Series, pd.DataFrame]:
+        self.logger.info("Phase A: Loading and preparing Food CPI data...")
 
-        import openpyxl
-        df_raw = pd.read_excel(self.cfg.data_path, sheet_name=self.cfg.sheet_name, header=None)
+        # 1. Handle Input Source
+        if file_obj is not None:
+            # Uploaded file from Streamlit
+            # Determine if it's a CSV or Excel based on file name/type
+            file_name = getattr(file_obj, 'name', 'data.xlsx')
+            if file_name.endswith('.csv'):
+                df_raw = pd.read_csv(file_obj, header=None)
+            else:
+                df_raw = pd.read_excel(file_obj, sheet_name=sheet_name or self.cfg.sheet_name, header=None)
+        else:
+            # Fallback to local path
+            df_raw = pd.read_excel(self.cfg.data_path, sheet_name=sheet_name or self.cfg.sheet_name, header=None)
 
-        # Logic migrated from phase_a_data.py
-        # 1. Extract pre-2024 rows
-        pre = df_raw.iloc[self.cfg.data_row_start : self.cfg.pre2024_row_end,
-                         [self.cfg.year_col, self.cfg.month_col, self.cfg.food_cpi_col]].copy()
-        pre.columns = ["Year", "Month", "FoodCPI"]
+        # 2. Resolve Column Indices
+        y_col = year_col if year_col is not None else self.cfg.default_year_col
+        m_col = month_col if month_col is not None else self.cfg.default_month_col
+        v_col = value_col if value_col is not None else self.cfg.default_food_cpi_col
 
-        # Forward-fill the year column (only populated on January rows)
-        pre["Year"] = pre["Year"].ffill()
-        pre["Year"] = pd.to_numeric(pre["Year"], errors="coerce")
+        # 3. Extract Data
+        # To support both NBS format and simple CSVs, we use a broad slice and filter
+        # instead of hardcoded row ranges.
+        data_rows = df_raw.iloc[self.cfg.data_row_start:]
 
-        # Keep only valid month rows and years >= series_start year
-        pre = pre[pre["Month"].isin(self.cfg.month_map.keys())]
-        pre = pre.dropna(subset=["Year", "FoodCPI"])
-        pre["Year"] = pre["Year"].astype(int)
-        pre["FoodCPI"] = pd.to_numeric(pre["FoodCPI"], errors="coerce")
-        pre["MonthNum"] = pre["Month"].map(self.cfg.month_map)
-        pre["Date"] = pd.to_datetime(
-            dict(year=pre["Year"], month=pre["MonthNum"], day=1)
-        )
+        years = data_rows.iloc[:, y_col].astype(str)
+        months = data_rows.iloc[:, m_col].astype(str)
+        values = data_rows.iloc[:, v_col]
 
+        # Forward-fill years if sparse (NBS format)
+        # We convert to numeric first to identify gaps
+        years_numeric = pd.to_numeric(years, errors='coerce')
+        if years_numeric.isna().any():
+            years_numeric = years_numeric.ffill()
+
+        years = years_numeric.fillna(0).astype(int)
+        values = pd.to_numeric(values, errors='coerce')
+
+        # 4. Date Construction
+        dates = []
+        for y, m in zip(years, months):
+            m_clean = str(m).strip()
+            m_num = self.cfg.month_map.get(m_clean, None)
+            if m_num and y > 0:
+                dates.append(f"{y}-{m_num:02d}-01")
+            else:
+                dates.append(np.nan)
+
+        # Filter out rows with invalid dates or values
+        valid_mask = pd.notna(dates) & pd.notna(values)
+        filtered_values = values[valid_mask]
+        filtered_dates = pd.to_datetime([d for d in dates if pd.notna(d)])
+
+        self.series = pd.Series(filtered_values.values, index=filtered_dates, name="Food_CPI")
+
+        # 5. Range Slicing
         series_start_ts = pd.Timestamp(self.cfg.series_start)
-        pre = pre[pre["Date"] >= series_start_ts]
-
-        # 2. Extract 2024 rows
-        y24 = df_raw.iloc[self.cfg.y2024_row_start : self.cfg.y2024_row_end,
-                         [self.cfg.year_col, self.cfg.month_col, self.cfg.food_cpi_col]].copy()
-        y24.columns = ["Year", "Month", "FoodCPI"]
-        y24["Year"] = 2024
-        y24["FoodCPI"] = pd.to_numeric(y24["FoodCPI"], errors="coerce")
-        y24 = y24[y24["Month"].isin(self.cfg.month_map.keys())]
-        y24 = y24.dropna(subset=["FoodCPI"])
-        y24["MonthNum"] = y24["Month"].map(self.cfg.month_map)
-        y24["Date"] = pd.to_datetime(
-            dict(year=y24["Year"], month=y24["MonthNum"], day=1)
-        )
-
-        # 3. Combine and build final series
-        combined = pd.concat(
-            [pre[["Date", "FoodCPI"]], y24[["Date", "FoodCPI"]]]
-        )
-        combined = (
-            combined
-            .sort_values("Date")
-            .drop_duplicates("Date")
-            .set_index("Date")
-        )
-        combined.index.freq = pd.tseries.frequencies.to_offset("MS")
-
         series_end_ts = pd.Timestamp(self.cfg.series_end)
-        self.series = combined["FoodCPI"].dropna()
-        self.series = self.series[self.series.index <= series_end_ts]
 
-        # Descriptive stats
+        # Sort index to ensure it is monotonic before any slicing
+        self.series = self.series.sort_index()
+
+        # Use boolean masking instead of .loc slicing to avoid KeyError when exact labels are missing
+        self.series = self.series[(self.series.index >= series_start_ts) & (self.series.index <= series_end_ts)]
+
+        # 6. Descriptive stats
         desc_stats_dict = {
             "n": len(self.series),
             "Mean": round(self.series.mean(), 4),
@@ -157,7 +172,7 @@ class FoodCPIForecaster:
                         bbox=dict(boxstyle="round,pad=0.2", fc="white", alpha=0.7))
 
         ax.set_title(
-            f"Figure 4.1 — Nigeria Monthly Food CPI: January 2010 – October 2024\n(Base: {self.cfg.base_period})",
+            f"Figure 4.1 — Nigeria Monthly Food CPI: {self.series.index[0].strftime('%B %Y')} – {self.series.index[-1].strftime('%B %Y')}\n(Base: {self.cfg.base_period})",
             fontsize=11, fontweight="bold", pad=10
         )
         ax.set_xlabel("Date", fontsize=10)
