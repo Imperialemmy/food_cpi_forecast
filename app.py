@@ -31,27 +31,23 @@ st.markdown("""
 if 'forecaster' not in st.session_state:
     st.session_state.config = ForecastConfig()
     st.session_state.forecaster = FoodCPIForecaster(st.session_state.config)
-    # Pre-load data and initial state
+
+    # Load default NBS data initially
     st.session_state.forecaster.load_data()
 
     # AUTO-LOAD FEATURE:
-    # If a saved model order exists in a table, we can use it to immediately fit the model
-    # Otherwise, we use the default from config.
     try:
-        # We check if the model comparison table exists to see if we have a 'best' order from a previous run
         table_path = os.path.join(st.session_state.config.tables_dir, "table3_model_comparison.csv")
         if os.path.exists(table_path):
-            # Load the results and pick the best one (lowest AIC)
             df_conv = pd.read_csv(table_path, index_col=0)
-            best_model_name = df_conv['AIC'].idxmin() # e.g., "ARIMA(2,2,2)"
+            best_model_name = df_conv['AIC'].idxmin()
             order_str = best_model_name.replace("ARIMA(", "").replace(")", "").split(",")
             best_order = tuple(map(int, order_str))
             st.session_state.config.model_order = best_order
             st.session_state.forecaster.best_order = best_order
-    except Exception as e:
+    except Exception:
         st.session_state.forecaster.best_order = st.session_state.config.model_order
 
-    # Fit the model immediately on startup so the charts aren't empty
     st.session_state.forecaster.estimate_model(auto_optimize=False)
     st.session_state.forecaster.generate_forecast(steps=st.session_state.config.forecast_steps)
 
@@ -60,8 +56,41 @@ config = st.session_state.config
 
 # --- Sidebar Configuration ---
 st.sidebar.header("🛠️ Model Configuration")
-st.sidebar.markdown("Adjust parameters to update the forecast in real-time.")
 
+# DATA UPLOAD SECTION
+st.sidebar.subheader("📂 Data Ingestion")
+uploaded_file = st.sidebar.file_uploader("Upload CPI Data (Excel/CSV)", type=["xlsx", "csv"])
+
+if uploaded_file is not None:
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**Column Mapping**")
+    u_year = st.sidebar.number_input("Year Column Index", value=config.default_year_col, min_value=0)
+    u_month = st.sidebar.number_input("Month Column Index", value=config.default_month_col, min_value=0)
+    u_val = st.sidebar.number_input("CPI Value Column Index", value=config.default_food_cpi_col, min_value=0)
+    u_sheet = st.sidebar.text_input("Sheet Name (Excel only)", value=config.sheet_name)
+
+    if st.sidebar.button("🔄 Process Uploaded File"):
+        with st.spinner("Loading and preparing data..."):
+            try:
+                forecaster.load_data(
+                    file_obj=uploaded_file,
+                    year_col=u_year,
+                    month_col=u_month,
+                    value_col=u_val,
+                    sheet_name=u_sheet
+                )
+                # Automatically adjust forecast start to be after the last available date
+                last_date = forecaster.series.index[-1]
+                config.forecast_start = (last_date + pd.DateOffset(months=1)).strftime('%Y-%m-%d')
+
+                # Re-run the pipeline with the new data
+                forecaster.estimate_model(auto_optimize=True)
+                forecaster.generate_forecast(steps=config.forecast_steps)
+                st.sidebar.success("New data processed successfully!")
+            except Exception as e:
+                st.sidebar.error(f"Error processing file: {e}")
+
+st.sidebar.markdown("---")
 st.sidebar.subheader("ARIMA Order (p, d, q)")
 p = st.sidebar.slider("AR Order (p)", 0, config.p_max, 2)
 d = st.sidebar.number_input("Integration Order (d)", value=config.d, step=1)
@@ -72,11 +101,8 @@ steps = st.sidebar.slider("Forecast Horizon (Months)", 1, 24, config.forecast_st
 auto_opt = st.sidebar.checkbox("Use Auto-ARIMA Optimization", value=True)
 
 if st.sidebar.button("🚀 Update Model"):
-    # Update config values
     config.model_order = (p, d, q)
     config.forecast_steps = steps
-
-    # Re-run estimation and forecast
     forecaster.estimate_model(auto_optimize=auto_opt)
     forecaster.generate_forecast(steps=steps)
     st.sidebar.success("Model Updated!")
