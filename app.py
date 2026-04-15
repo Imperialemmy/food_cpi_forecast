@@ -3,6 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from src.config import ForecastConfig
 from src.forecaster import FoodCPIForecaster
 
@@ -16,13 +18,78 @@ st.set_page_config(
 # --- Custom CSS for Professional Look ---
 st.markdown("""
     <style>
-    .main {
-        background-color: transparent;
+    /* Use Streamlit's theme variables for dynamic dark/light mode support */
+    .stApp {
+        background-color: var(--secondary-background-color);
     }
-    /* Remove the hardcoded white background from metrics to let Streamlit's theme handle it */
-    div[data-testid="stMetric"] {
-        background-color: transparent !important;
-        box-shadow: none !important;
+
+    h1, h2, h3 {
+        color: var(--text-color) !important;
+        font-family: 'Inter', sans-serif;
+    }
+
+    /* Professional Metric Cards - Theme Aware */
+    .metric-card {
+        background-color: var(--secondary-background-color);
+        padding: 20px;
+        border-radius: 10px;
+        border-left: 5px solid #C5B358;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        margin-bottom: 20px;
+        border: 1px solid var(--border-color);
+    }
+
+    .metric-label {
+        color: var(--secondary-text-color);
+        font-size: 0.9rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        margin-bottom: 5px;
+    }
+
+    .metric-value {
+        color: var(--text-color);
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+
+    /* Welcome Screen Styling */
+    .welcome-container {
+        text-align: center;
+        padding: 3rem;
+        background-color: #002147;
+        color: white;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+    }
+
+    .welcome-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+    }
+
+    /* Footer Styling */
+    .footer {
+        text-align: center;
+        padding: 2rem;
+        color: var(--secondary-text-color);
+        font-size: 0.9rem;
+        border-top: 1px solid var(--border-color);
+        margin-top: 3rem;
+    }
+
+    /* Button Overrides */
+    .stButton>button {
+        background-color: #002147;
+        color: white;
+        border-radius: 8px;
+        border: none;
+    }
+    .stButton>button:hover {
+        background-color: #C5B358;
+        color: #002147;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -31,28 +98,19 @@ st.markdown("""
 if 'forecaster' not in st.session_state:
     st.session_state.config = ForecastConfig()
     st.session_state.forecaster = FoodCPIForecaster(st.session_state.config)
-
-    # Load default NBS data initially
-    st.session_state.forecaster.load_data()
-
-    # AUTO-LOAD FEATURE:
-    try:
-        table_path = os.path.join(st.session_state.config.tables_dir, "table3_model_comparison.csv")
-        if os.path.exists(table_path):
-            df_conv = pd.read_csv(table_path, index_col=0)
-            best_model_name = df_conv['AIC'].idxmin()
-            order_str = best_model_name.replace("ARIMA(", "").replace(")", "").split(",")
-            best_order = tuple(map(int, order_str))
-            st.session_state.config.model_order = best_order
-            st.session_state.forecaster.best_order = best_order
-    except Exception:
-        st.session_state.forecaster.best_order = st.session_state.config.model_order
-
-    st.session_state.forecaster.estimate_model(auto_optimize=False)
-    st.session_state.forecaster.generate_forecast(steps=st.session_state.config.forecast_steps)
+    st.session_state.data_loaded = False
 
 forecaster = st.session_state.forecaster
 config = st.session_state.config
+
+# --- Helper for Metric Cards ---
+def render_metric_card(label, value):
+    st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">{label}</div>
+            <div class="metric-value">{value}</div>
+        </div>
+    """, unsafe_allow_html=True)
 
 # --- Sidebar Configuration ---
 st.sidebar.header("🛠️ Model Configuration")
@@ -79,111 +137,152 @@ if uploaded_file is not None:
                     value_col=u_val,
                     sheet_name=u_sheet
                 )
-                # Automatically adjust forecast start to be after the last available date
                 last_date = forecaster.series.index[-1]
                 config.forecast_start = (last_date + pd.DateOffset(months=1)).strftime('%Y-%m-%d')
 
-                # Re-run the pipeline with the new data
                 forecaster.estimate_model(auto_optimize=True)
                 forecaster.generate_forecast(steps=config.forecast_steps)
+                st.session_state.data_loaded = True
                 st.sidebar.success("New data processed successfully!")
             except Exception as e:
                 st.sidebar.error(f"Error processing file: {e}")
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("ARIMA Order (p, d, q)")
-p = st.sidebar.slider("AR Order (p)", 0, config.p_max, 2)
-d = st.sidebar.number_input("Integration Order (d)", value=config.d, step=1)
-q = st.sidebar.slider("MA Order (q)", 0, config.q_max, 2)
+if st.session_state.get('data_loaded', False):
+    st.sidebar.subheader("ARIMA Order (p, d, q)")
+    p = st.sidebar.slider("AR Order (p)", 0, config.p_max, 2)
+    d = st.sidebar.number_input("Integration Order (d)", value=config.d, step=1)
+    q = st.sidebar.slider("MA Order (q)", 0, config.q_max, 2)
 
-st.sidebar.subheader("Forecast Settings")
-steps = st.sidebar.slider("Forecast Horizon (Months)", 1, 24, config.forecast_steps)
-auto_opt = st.sidebar.checkbox("Use Auto-ARIMA Optimization", value=True)
+    st.sidebar.subheader("Forecast Settings")
+    steps = st.sidebar.slider("Forecast Horizon (Months)", 1, 24, config.forecast_steps)
+    auto_opt = st.sidebar.checkbox("Use Auto-ARIMA Optimization", value=True)
 
-if st.sidebar.button("🚀 Update Model"):
-    config.model_order = (p, d, q)
-    config.forecast_steps = steps
-    forecaster.estimate_model(auto_optimize=auto_opt)
-    forecaster.generate_forecast(steps=steps)
-    st.sidebar.success("Model Updated!")
+    if st.sidebar.button("🚀 Update Model"):
+        config.model_order = (p, d, q)
+        config.forecast_steps = steps
+        forecaster.estimate_model(auto_optimize=auto_opt)
+        forecaster.generate_forecast(steps=steps)
+        st.sidebar.success("Model Updated!")
+else:
+    st.sidebar.warning("Please upload and process data to unlock model settings.")
 
 # --- Main Dashboard UI ---
-st.title("📈 Nigeria Food Consumer Price Index Forecast")
-st.markdown("An ARIMA-Based Rolling Validation Framework for Food Price Analysis")
+if not st.session_state.get('data_loaded', False):
+    st.markdown("""
+        <div class="welcome-container">
+            <div class="welcome-title">📈 Nigeria Food CPI Forecaster</div>
+            <p>An ARIMA-Based Rolling Validation Framework for Professional Price Analysis</p>
+            <p>Please use the <b>Data Ingestion</b> panel in the sidebar to upload your dataset to begin.</p>
+        </div>
+    """, unsafe_allow_html=True)
+    st.info("💡 Tip: If you are using the default NBS dataset, simply upload it and click 'Process'.")
+    st.stop()
+
+st.markdown('<div style="text-align: center; margin-bottom: 2rem;"><h1>📈 Nigeria Food Consumer Price Index Forecast</h1><p>Professional ARIMA Rolling Validation Framework</p></div>', unsafe_allow_html=True)
 
 # 1. Key Metrics Row
 col1, col2, col3, col4 = st.columns(4)
-
-# Get the best order from the forecaster
 best_order = forecaster.best_order if forecaster.best_order else config.model_order
+latest_val = forecaster.series.iloc[-1] if forecaster.series is not None else 0
 
 with col1:
-    st.metric("Selected Model", f"ARIMA{best_order}")
+    render_metric_card("Selected Model", f"ARIMA{best_order}")
 with col2:
-    # We can't easily get MAPE without running validation, but we can show the latest value
-    latest_val = forecaster.series.iloc[-1] if forecaster.series is not None else 0
-    st.metric("Latest CPI Value", f"{latest_val:.2f}")
+    render_metric_card("Latest CPI Value", f"{latest_val:.2f}")
 with col3:
-    st.metric("Data Span", f"{forecaster.series.index[0].year} - {forecaster.series.index[-1].year}")
+    render_metric_card("Data Span", f"{forecaster.series.index[0].year} - {forecaster.series.index[-1].year}")
 with col4:
-    st.metric("Observations (n)", len(forecaster.series))
+    render_metric_card("Observations (n)", str(len(forecaster.series)))
 
 # 2. Visualizations
 tab1, tab2, tab3 = st.tabs(["📈 Forecast", "🔍 Diagnostics", "📊 Validation"])
 
 with tab1:
-    st.subheader("Food CPI Level Series & Forecast")
+    st.subheader("Interactive Food CPI Forecast")
 
-    # We'll generate the plot using the existing logic but display it in Streamlit
-    # Since generate_forecast saves a file, we can read that file or just re-plot
-    # For better performance and interactivity, we'll re-plot here
-    fig, ax = plt.subplots(figsize=(12, 6))
-    plt.style.use(config.fig_style)
-
-    ax.plot(forecaster.series, label="Historical Food CPI", color='black')
-
-    # Generate forecast on the fly for the plot
     if forecaster.model_results:
-        forecast_obj = forecaster.model_results.get_forecast(steps=steps)
-        forecast_values = forecast_obj.predicted_mean
-        conf_int = forecast_obj.conf_int(alpha=1 - config.pi_level)
+        # Prepare Plotly Figure
+        fig = go.Figure()
 
-        forecast_dates = pd.date_range(
-            start=pd.to_datetime(config.forecast_start),
-            periods=steps,
-            freq='MS'
+        # Historical Data
+        fig.add_trace(go.Scatter(
+            x=forecaster.series.index,
+            y=forecaster.series.values,
+            mode='lines',
+            name='Historical CPI',
+            line=dict(color='#002147', width=2)
+        ))
+
+        # Forecast Data
+        forecast_df, _ = forecaster.generate_forecast(steps=steps)
+        f_dates = pd.to_datetime(forecast_df['Month'])
+
+        fig.add_trace(go.Scatter(
+            x=f_dates,
+            y=forecast_df['Forecast'],
+            mode='lines',
+            name='ARIMA Forecast',
+            line=dict(color='#C5B358', width=3)
+        ))
+
+        # Confidence Interval
+        fig.add_trace(go.Scatter(
+            x=pd.concat([f_dates, f_dates[::-1]]),
+            y=pd.concat([forecast_df['Upper CI'], forecast_df['Lower CI'][::-1]]),
+            fill='toself',
+            fillcolor='rgba(197, 179, 88, 0.2)',
+            line=dict(color='rgba(255,255,255,0)'),
+            hoverinfo="skip",
+            showlegend=True,
+            name='95% Confidence Interval'
+        ))
+
+        fig.update_layout(
+            title=f"Nigeria Food CPI Forecast: ARIMA{best_order}",
+            xaxis_title="Date",
+            yaxis_title="Index Value",
+            template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly_white",
+            hovermode="x unified",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
+        st.plotly_chart(fig, use_container_width=True)
 
-        ax.plot(forecast_dates, forecast_values, label="ARIMA Forecast", color='blue', linewidth=2)
-        ax.fill_between(forecast_dates, conf_int.iloc[:, 0], conf_int.iloc[:, 1], color='blue', alpha=0.2, label="95% Confidence Interval")
-
-    ax.set_title(f"Nigeria Food CPI Forecast: ARIMA{best_order}")
-    ax.set_ylabel("Index Value")
-    ax.legend()
-    st.pyplot(fig)
-
-    # Forecast Table
-    if forecaster.model_results:
         st.subheader("Forecasted Values")
-        # Re-generate the forecast dataframe
-        forecast_obj = forecaster.model_results.get_forecast(steps=steps)
-        forecast_df = pd.DataFrame({
-            "Month": pd.date_range(start=pd.to_datetime(config.forecast_start), periods=steps, freq='MS'),
-            "Forecast": forecast_obj.predicted_mean.values,
-            "Lower CI": forecast_obj.conf_int(alpha=1-config.pi_level).iloc[:, 0].values,
-            "Upper CI": forecast_obj.conf_int(alpha=1-config.pi_level).iloc[:, 1].values
-        })
         st.table(forecast_df.set_index("Month"))
 
 with tab2:
     st.subheader("Model Residuals & Diagnostics")
     if st.button("Run Diagnostics"):
         diag_results = forecaster.run_diagnostics()
-        # The run_diagnostics method saves fig4_residual_diagnostics.png
-        # We can load and display it
-        fig_path = f"{config.figures_dir}/fig4_residual_diagnostics.png"
-        if os.path.exists(fig_path):
-            st.image(fig_path, caption="Residual Analysis (Time Series, Histogram, ACF, Q-Q Plot)")
+        residuals = diag_results["residuals"]
+
+        # Create 2x2 Plotly Grid
+        fig = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=("Residuals Over Time", "Residuals Distribution", "ACF of Residuals", "Normal Q-Q Plot")
+        )
+
+        # 1. Residuals Plot
+        fig.add_trace(go.Scatter(x=residuals.index, y=residuals.values, mode='lines', line=dict(color='#002147')), row=1, col=1)
+
+        # 2. Histogram
+        fig.add_trace(go.Histogram(x=residuals.values, marker_color='#C5B358'), row=1, col=2)
+
+        # 3. ACF (Simplified as a bar chart)
+        from statsmodels.tsa.stattools import acf
+        acf_vals = acf(residuals, nlags=20)
+        fig.add_trace(go.Bar(x=list(range(len(acf_vals))), y=acf_vals, marker_color='#002147'), row=2, col=1)
+
+        # 4. Q-Q Plot (Scatter)
+        sorted_res = np.sort(residuals)
+        # Theoretical quantiles
+        import scipy.stats as stats
+        theoretical = stats.norm.ppf((np.arange(len(sorted_res)) + 1) / (len(sorted_res) + 1))
+        fig.add_trace(go.Scatter(x=theoretical, y=sorted_res, mode='markers', marker=dict(color='#C5B358')), row=2, col=2)
+
+        fig.update_layout(height=800, template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly_white", showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
 
         st.write("Ljung-Box Test Results:")
         st.dataframe(diag_results["ljungbox"])
@@ -193,13 +292,28 @@ with tab3:
     if st.button("Run Validation"):
         with st.spinner("Computing errors across horizons..."):
             val_df = forecaster.validate_walk_forward(horizons=[1, 3, 6, 12])
+
+            # Plotly Bar Chart for MAPE
+            fig = go.Figure(go.Bar(
+                x=val_df.index,
+                y=val_df["MAPE (%)"],
+                marker_color='#002147'
+            ))
+            fig.update_layout(
+                title="Forecast Accuracy Decay (MAPE %)",
+                xaxis_title="Horizon",
+                yaxis_title="MAPE (%)",
+                template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly_white"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
             st.write("Accuracy Metrics per Horizon:")
             st.dataframe(val_df)
 
-            fig_path = f"{config.figures_dir}/fig5_rolling_origin.png"
-            if os.path.exists(fig_path):
-                st.image(fig_path, caption="Forecast Accuracy Decay (MAPE)")
-
 # Footer
-st.markdown("---")
-st.markdown(f"**Developed by Adeeko Oluwaseun Victor** | PGD Computer Science, Babcock University")
+st.markdown(f"""
+    <div class="footer">
+        <b>Developed by Adeeko Oluwaseun Victor</b> | PGD Computer Science, Babcock University<br>
+        © 2026 ARIMA-Based Rolling Validation Framework
+    </div>
+    """, unsafe_allow_html=True)
