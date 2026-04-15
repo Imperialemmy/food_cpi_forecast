@@ -367,7 +367,11 @@ class FoodCPIForecaster:
 
         self._save_figure(fig, "fig4_residual_diagnostics.png")
 
-        return {"ljungbox": lb_df, "jb_p": jb_p}
+        return {
+            "ljungbox": lb_df,
+            "jb_p": jb_p,
+            "residuals": residuals
+        }
 
     # --------------------------------------------------------------------------
     # Phase F: Walk-Forward Validation
@@ -446,7 +450,7 @@ class FoodCPIForecaster:
     # Phase G: Final Forecast
     # --------------------------------------------------------------------------
 
-    def generate_forecast(self, steps: int = 12) -> pd.DataFrame:
+    def generate_forecast(self, steps: int = 12) -> Tuple[pd.DataFrame, Any]:
         self.logger.info(f"Phase G: Generating {steps}-month ahead forecast...")
 
         # Re-fit on full data
@@ -490,4 +494,4 @@ class FoodCPIForecaster:
 
         self._save_figure(fig, "fig6_forecast.png")
 
-        return forecast_df
+        return forecast_df, res
