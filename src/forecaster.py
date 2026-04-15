@@ -391,17 +391,20 @@ class FoodCPIForecaster:
             for origin in eval_indices:
                 train = self.series[:origin]
                 try:
-                    # Re-fit model on the training slice
+                    # Forecast h-steps ahead
                     m = ARIMA(train, order=self.best_order).fit()
                     f = m.forecast(steps=h)
-                    y_pred = f.iloc[-1]
+
+                    # Explicitly cast to float to ensure we have a scalar, not a sequence
+                    y_pred = float(f.iloc[-1])
 
                     actual_idx = origin + pd.DateOffset(months=h)
                     if actual_idx in self.series.index:
-                        y_actual = self.series.loc[actual_idx]
+                        y_actual = float(self.series.loc[actual_idx])
                         h_actuals.append(y_actual)
                         h_preds.append(y_pred)
-                except:
+                except Exception as e:
+                    self.logger.debug(f"Forecast failed at origin {origin} for horizon {h}: {e}")
                     continue
 
             if not h_actuals:
