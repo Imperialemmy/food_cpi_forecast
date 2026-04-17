@@ -199,7 +199,31 @@ with col4:
 tab1, tab2, tab3 = st.tabs(["📈 Forecast", "🔍 Diagnostics", "📊 Validation"])
 
 with tab1:
-    st.subheader("Interactive Food CPI Forecast")
+    # --- Figure 4.1: Historical Level Series ---
+    st.subheader("Historical Analysis")
+    st.markdown("**Figure 4.1: Nigeria Monthly Food CPI Level Series**")
+
+    fig_hist = go.Figure()
+    fig_hist.add_trace(go.Scatter(
+        x=forecaster.series.index,
+        y=forecaster.series.values,
+        mode='lines',
+        name='Food CPI',
+        line=dict(color='#002147', width=2)
+    ))
+    fig_hist.update_layout(
+        xaxis_title="Date",
+        yaxis_title="Index Value",
+        template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly_white",
+        hovermode="x unified"
+    )
+    st.plotly_chart(fig_hist, use_container_width=True)
+
+    st.markdown("---")
+
+    # --- Figure 4.6: Forecast ---
+    st.subheader("Forecasting Results")
+    st.markdown("**Figure 4.6: Nigeria Food CPI: Historical Series and 12-Month Ahead Forecast**")
 
     if forecaster.model_results:
         # Prepare Plotly Figure
@@ -239,7 +263,7 @@ with tab1:
         ))
 
         fig.update_layout(
-            title=f"Nigeria Food CPI Forecast: ARIMA{best_order}",
+            title=f"ARIMA{best_order} Forecast",
             xaxis_title="Date",
             yaxis_title="Index Value",
             template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly_white",
@@ -253,6 +277,7 @@ with tab1:
 
 with tab2:
     st.subheader("Model Residuals & Diagnostics")
+    st.markdown("**Figure 4.4: Four-Panel Residual Diagnostic Chart**")
     if st.button("Run Diagnostics"):
         diag_results = forecaster.run_diagnostics()
         residuals = diag_results["residuals"]
@@ -289,6 +314,7 @@ with tab2:
 
 with tab3:
     st.subheader("Walk-Forward Validation (Multi-Horizon)")
+    st.markdown("**Figure 4.5: Forecast Accuracy Decay by Horizon**")
     if st.button("Run Validation"):
         with st.spinner("Computing errors across horizons..."):
             val_df = forecaster.validate_walk_forward(horizons=[1, 3, 6, 12])
