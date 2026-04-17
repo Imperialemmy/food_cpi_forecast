@@ -193,7 +193,16 @@ class FoodCPIForecaster:
         results = []
         # Test levels, 1st diff, 2nd diff
         for d in [0, 1, 2]:
-            diff_series = self.series.diff(d).dropna()
+            # Handle differencing correctly:
+            # d=0 -> Use original level series
+            # d=1 -> Use first difference
+            # d=2 -> Use second difference (diff of the diff)
+            if d == 0:
+                diff_series = self.series
+            else:
+                diff_series = self.series.diff(d)
+
+            diff_series = diff_series.dropna()
 
             # Handle edge case where diff_series might be constant (causes adfuller to fail)
             if diff_series.nunique() <= 1:
