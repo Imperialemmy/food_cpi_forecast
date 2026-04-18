@@ -196,7 +196,7 @@ with col4:
     render_metric_card("Observations (n)", str(len(forecaster.series)))
 
 # 2. Visualizations
-tab1, tab2, tab3 = st.tabs(["📈 Forecast", "🔍 Diagnostics", "📊 Validation"])
+tab1, tab2, tab3, tab4 = st.tabs(["📈 Forecast", "🔍 Identification", "⚙️ Diagnostics", "📊 Validation"])
 
 with tab1:
     # --- Figure 4.1: Historical Level Series ---
@@ -276,43 +276,107 @@ with tab1:
         st.table(forecast_df.set_index("Month"))
 
 with tab2:
-    st.subheader("Model Residuals & Diagnostics")
-    st.markdown("**Figure 4.4: Four-Panel Residual Diagnostic Chart**")
-    if st.button("Run Diagnostics"):
-        diag_results = forecaster.run_diagnostics()
-        residuals = diag_results["residuals"]
+    st.subheader("Model Identification (ACF & PACF)")
 
-        # Create 2x2 Plotly Grid
-        fig = make_subplots(
-            rows=2, cols=2,
-            subplot_titles=("Residuals Over Time", "Residuals Distribution", "ACF of Residuals", "Normal Q-Q Plot")
-        )
+    # Figure 4.2: Level Series Identification
+    st.markdown("**Figure 4.2: ACF and PACF of Food CPI Level Series**")
 
-        # 1. Residuals Plot
-        fig.add_trace(go.Scatter(x=residuals.index, y=residuals.values, mode='lines', line=dict(color='#002147')), row=1, col=1)
+    fig_id_level = make_subplots(rows=2, cols=1, subplot_titles=("ACF", "PACF"))
 
-        # 2. Histogram
-        fig.add_trace(go.Histogram(x=residuals.values, marker_color='#C5B358'), row=1, col=2)
+    from statsmodels.tsa.stattools import acf, pacf
+    l_acf = acf(forecaster.series, nlags=20)
+    l_pacf = pacf(forecaster.series, nlags=20)
 
-        # 3. ACF (Simplified as a bar chart)
-        from statsmodels.tsa.stattools import acf
-        acf_vals = acf(residuals, nlags=20)
-        fig.add_trace(go.Bar(x=list(range(len(acf_vals))), y=acf_vals, marker_color='#002147'), row=2, col=1)
+    fig_id_level.add_trace(go.Bar(x=list(range(len(l_acf))), y=l_acf, marker_color='#002147', name="ACF"), row=1, col=1)
+    fig_id_level.add_trace(go.Bar(x=list(range(len(l_pacf))), y=l_pacf, marker_color='#C5B358', name="PACF"), row=2, col=1)
 
-        # 4. Q-Q Plot (Scatter)
-        sorted_res = np.sort(residuals)
-        # Theoretical quantiles
-        import scipy.stats as stats
-        theoretical = stats.norm.ppf((np.arange(len(sorted_res)) + 1) / (len(sorted_res) + 1))
-        fig.add_trace(go.Scatter(x=theoretical, y=sorted_res, mode='markers', marker=dict(color='#C5B358')), row=2, col=2)
+    fig_id_level.update_layout(
+        height=600,
+        template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly_white",
+        showlegend=False,
+        yaxis1_title="Autocorrelation",
+        yaxis2_title="Partial Autocorrelation"
+    )
+    st.plotly_chart(fig_id_level, use_container_width=True)
 
-        fig.update_layout(height=800, template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly_white", showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
+    st.markdown("---")
 
-        st.write("Ljung-Box Test Results:")
-        st.dataframe(diag_results["ljungbox"])
+    # Figure 4.3: Second-Differenced Identification
+    st.markdown("**Figure 4.3: ACF and PACF of Second-Differenced Food CPI Series**")
+
+    diff_series = forecaster.series.diff(1).diff(1).dropna()
+    d_acf = acf(diff_series, nlags=20)
+    d_pacf = pacf(diff_series, nlags=20)
+
+    fig_id_diff = make_subplots(rows=2, cols=1, subplot_titles=("ACF", "PACF"))
+    fig_id_diff.add_trace(go.Bar(x=list(range(len(d_acf))), y=d_acf, marker_color='#002147', name="ACF"), row=1, col=1)
+    fig_id_diff.add_trace(go.Bar(x=list(range(len(d_pacf))), y=d_pacf, marker_color='#C5B358', name="PACF"), row=2, col=1)
+
+    fig_id_diff.update_layout(
+        height=600,
+        template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly_white",
+        showlegend=False,
+        yaxis1_title="Autocorrelation",
+        yaxis2_title="Partial Autocorrelation"
+    )
+    st.plotly_chart(fig_id_diff, use_container_width=True)
 
 with tab3:
+    st.subheader("Residual Diagnostics")
+    st.markdown("**Figure 4.4: ARIMA Residual Analysis**")
+
+    if st.button("🚀 Run Diagnostic Checks"):
+        with st.spinner("Analyzing residuals..."):
+            if forecaster.model_results:
+                # We call run_diagnostics to ensure figures are saved and data is prepared
+                diag_results = forecaster.run_diagnostics()
+
+                # Create a 2x2 Plotly Grid for Diagnostics
+                fig_diag = make_subplots(
+                    rows=2, cols=2,
+                    subplot_titles=("Residuals", "Distribution", "ACF of Residuals", "Q-Q Plot"),
+                    vertical_spacing=0.12,
+                    horizontal_spacing=0.1
+                )
+
+                # 1. Residuals Time Series
+                fig_diag.add_trace(go.Scatter(x=diag_results['residuals'].index, y=diag_results['residuals'].values,
+                                             mode='lines', name='Residuals', line=dict(color='#002147')), row=1, col=1)
+
+                # 2. Histogram/KDE
+                fig_diag.add_trace(go.Histogram(x=diag_results['residuals'].values,
+                                              name='Distribution', marker_color='#C5B358', nbinsx=30), row=1, col=2)
+
+                # 3. ACF of Residuals
+                from statsmodels.tsa.stattools import acf
+                res_acf = acf(diag_results['residuals'], nlags=20)
+                fig_diag.add_trace(go.Bar(x=list(range(len(res_acf))), y=res_acf,
+                                         marker_color='#002147', name="Res ACF"), row=2, col=1)
+
+                # 4. Q-Q Plot (Approximate with Scatter)
+                import scipy.stats as stats
+                qq = stats.probplot(diag_results['residuals'], dist="norm")
+                fig_diag.add_trace(go.Scatter(x=qq[0], y=qq[1], mode='markers',
+                                             marker=dict(color='#C5B358'), name="Q-Q Plot"), row=2, col=2)
+
+                fig_diag.update_layout(
+                    height=800,
+                    template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly_white",
+                    showlegend=False,
+                    title_text="Model Diagnostic Checks"
+                )
+                st.plotly_chart(fig_diag, use_container_width=True)
+
+                st.markdown("---")
+                st.subheader("Ljung-Box Test Results")
+                if 'ljungbox' in diag_results:
+                    st.table(diag_results['ljungbox'])
+                else:
+                    st.error("Ljung-Box results not found in diagnostic output.")
+            else:
+                st.warning("Please update the model first to see diagnostic results.")
+
+with tab4:
     st.subheader("Walk-Forward Validation (Multi-Horizon)")
     st.markdown("**Figure 4.5: Forecast Accuracy Decay by Horizon**")
     if st.button("Run Validation"):
@@ -336,7 +400,6 @@ with tab3:
             st.write("Accuracy Metrics per Horizon:")
             st.dataframe(val_df)
 
-# Footer
 st.markdown(f"""
     <div class="footer">
         <b>Developed by Adeeko Oluwaseun Victor</b> | PGD Computer Science, Babcock University<br>
