@@ -42,8 +42,14 @@ class ForecastConfig:
 
     # -- Candidate model grid ---------------------------------------------------
     p_max: int = 2
-    d: int = 2
+    d: int = 2                 # Fallback / manual override for the differencing order
     q_max: int = 2
+
+    # When True, Phase B selects d empirically via ADF/KPSS (pmdarima.ndiffs),
+    # capped at max_d, and that value drives identification and estimation.
+    # When False, the hardcoded `d` above is used throughout.
+    auto_select_d: bool = True
+    max_d: int = 2
 
     # -- Selected model ---------------------------------------------------------
     model_order: Tuple[int, int, int] = (2, 2, 2)
