@@ -119,14 +119,39 @@ class FoodCPIForecaster:
         values = pd.to_numeric(values, errors='coerce')
 
         # 4. Date Construction
+        #
+        # The NBS sheet only prints a year label on the first month of each
+        # year, so the trailing partial year (e.g. Jan–Oct 2024) has a blank
+        # year cell. A plain forward-fill therefore stamps those months with
+        # the previous year, silently mislabelling them as duplicate dates.
+        #
+        # To recover the true year we track month rollovers (a Dec->Jan style
+        # decrease) and bump a correction offset whenever a rollover occurs
+        # that the forward-filled label did not already account for. This is
+        # self-correcting for any trailing year, with no hardcoded row ranges.
         dates = []
+        prev_month_num = None
+        prev_year_ffill = None
+        year_offset = 0
         for y, m in zip(years, months):
             m_clean = str(m).strip()
             m_num = self.cfg.month_map.get(m_clean, None)
-            if m_num and y > 0:
-                dates.append(f"{y}-{m_num:02d}-01")
-            else:
+
+            if m_num is None or y <= 0:
                 dates.append(np.nan)
+                continue
+
+            if prev_month_num is not None:
+                rolled_over = m_num < prev_month_num
+                ffill_advanced = y != prev_year_ffill
+                if rolled_over and not ffill_advanced:
+                    # A new year began but the sheet carried no label for it.
+                    year_offset += 1
+
+            corrected_year = y + year_offset
+            dates.append(f"{corrected_year}-{m_num:02d}-01")
+            prev_month_num = m_num
+            prev_year_ffill = y
 
         # Filter out rows with invalid dates or values
         valid_mask = pd.notna(dates) & pd.notna(values)
