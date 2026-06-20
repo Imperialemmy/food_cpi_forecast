@@ -53,6 +53,19 @@ class FoodCPIForecaster:
         (set in Phase B) if available, otherwise the configured fallback."""
         return self.d if self.d is not None else self.cfg.d
 
+    @staticmethod
+    def _difference(series: pd.Series, d: int) -> pd.Series:
+        """Apply d-th order differencing by iterating the first difference.
+
+        This is the true I(d) transform (diff of diff). Note `series.diff(d)`
+        would instead compute the lag-d difference (x_t - x_{t-d}), which is a
+        different operation and only coincides with this for d in {0, 1}.
+        """
+        out = series
+        for _ in range(int(d)):
+            out = out.diff()
+        return out
+
     def _save_table(self, df: pd.DataFrame, filename: str):
         path = os.path.join(self.cfg.tables_dir, filename)
         df.to_csv(path, index=True)
@@ -229,18 +242,11 @@ class FoodCPIForecaster:
         self.logger.info("Phase B: Running ADF and KPSS stationarity tests...")
 
         results = []
-        # Test levels, 1st diff, 2nd diff
+        # Test the level series, the first difference, and the second difference.
+        # d=2 must be the iterated second difference (diff of the diff), not the
+        # lag-2 difference that series.diff(2) would produce.
         for d in [0, 1, 2]:
-            # Handle differencing correctly:
-            # d=0 -> Use original level series
-            # d=1 -> Use first difference
-            # d=2 -> Use second difference (diff of the diff)
-            if d == 0:
-                diff_series = self.series
-            else:
-                diff_series = self.series.diff(d)
-
-            diff_series = diff_series.dropna()
+            diff_series = self._difference(self.series, d).dropna()
 
             # Handle edge case where diff_series might be constant (causes adfuller to fail)
             if diff_series.nunique() <= 1:
@@ -307,9 +313,10 @@ class FoodCPIForecaster:
     def identify_orders(self) -> Dict[str, Any]:
         self.logger.info("Phase C: Generating ACF and PACF correlograms...")
 
-        # Prepare differenced series (using the order selected in Phase B)
+        # Prepare differenced series (using the order selected in Phase B).
+        # Use iterated differencing so d=2 is the true second difference.
         d = self._diff_order
-        diff_series = self.series.diff(d).dropna()
+        diff_series = self._difference(self.series, d).dropna()
 
         # Compute ACF/PACF
         acf_vals = acf(diff_series, nlags=self.cfg.acf_nlags)
