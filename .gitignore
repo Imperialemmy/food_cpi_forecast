@@ -11,8 +11,8 @@ __pycache__/
 venv/
 env/
 
-# Generated outputs
-outputs/
+# Generated outputs are committed so figures/tables are visible without
+# re-running the pipeline (kept for the project submission).
 
 # OS / editor
 .DS_Store
