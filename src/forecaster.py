@@ -318,6 +318,17 @@ class FoodCPIForecaster:
         d = self._diff_order
         diff_series = self._difference(self.series, d).dropna()
 
+        # Figure 4.2 — ACF/PACF of the LEVEL series. The slow ACF decay is the
+        # visual signature of non-stationarity that motivates differencing.
+        fig_lvl, axes_lvl = plt.subplots(2, 1, figsize=(10, 8))
+        plt.style.use(self.cfg.fig_style)
+        plot_acf(self.series, lags=self.cfg.acf_nlags, ax=axes_lvl[0], alpha=self.cfg.ci_level)
+        axes_lvl[0].set_title("ACF of Food CPI (Level Series)")
+        plot_pacf(self.series, lags=self.cfg.acf_nlags, ax=axes_lvl[1],
+                  alpha=self.cfg.ci_level, method=self.cfg.pacf_method)
+        axes_lvl[1].set_title("PACF of Food CPI (Level Series)")
+        self._save_figure(fig_lvl, "fig2_acf_pacf_level.png")
+
         # Compute ACF/PACF
         acf_vals = acf(diff_series, nlags=self.cfg.acf_nlags)
         pacf_vals = pacf(diff_series, nlags=self.cfg.acf_nlags, method=self.cfg.pacf_method)
