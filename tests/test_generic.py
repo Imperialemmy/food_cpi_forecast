@@ -6,6 +6,7 @@ These exercise the generic CSV-upload path using the small synthetic
 run quickly without needing the full NBS Excel dataset.
 """
 import os
+import tempfile
 
 import numpy as np
 import pandas as pd
@@ -27,6 +28,11 @@ def _make_forecaster():
     config.forecast_start = "2022-01-01"
     # A clean CSV has a single header row, unlike the multi-row NBS Excel layout.
     config.data_row_start = 1
+    # Write figures/tables to a throwaway dir so tests never overwrite the
+    # committed outputs/ produced from the real NBS data.
+    tmp = tempfile.mkdtemp(prefix="cpi_test_outputs_")
+    config.figures_dir = os.path.join(tmp, "figures")
+    config.tables_dir = os.path.join(tmp, "tables")
     return FoodCPIForecaster(config)
 
 
