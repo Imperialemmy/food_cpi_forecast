@@ -5,7 +5,7 @@ from typing import List, Tuple, Dict
 @dataclass
 class ForecastConfig:
     # -- Paths -----------------------------------------------------------------
-    data_path: str = os.path.join("data", "cpi_1NewDec2024.xlsx")
+    data_path: str = os.path.join("data", "cpi_OCT2024.xlsx")
     figures_dir: str = os.path.join("outputs", "figures")
     tables_dir: str = os.path.join("outputs", "tables")
 

@@ -29,6 +29,10 @@ class FoodCPIForecaster:
         self.model_results: Optional[Any] = None
         self.best_order: Optional[Tuple[int, int, int]] = None
 
+        # Ensure output directories exist before any table/figure is saved
+        os.makedirs(self.cfg.figures_dir, exist_ok=True)
+        os.makedirs(self.cfg.tables_dir, exist_ok=True)
+
         # Set up logging
         logging.basicConfig(
             level=logging.INFO,
@@ -292,7 +296,8 @@ class FoodCPIForecaster:
                         "BIC": res.bic,
                         "RMSE": np.sqrt(np.mean(res.resid**2))
                     })
-                except:
+                except Exception as e:
+                    self.logger.debug(f"Grid search failed for ARIMA({p},{self.cfg.d},{q}): {e}")
                     continue
 
         grid_df = pd.DataFrame(grid_results).set_index("Model")
