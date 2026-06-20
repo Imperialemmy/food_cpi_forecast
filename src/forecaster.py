@@ -13,6 +13,7 @@ from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.stats.diagnostic import acorr_ljungbox
 from scipy import stats
 import pmdarima as pm
+from pmdarima.arima import ndiffs
 
 from src.config import ForecastConfig
 
@@ -28,6 +29,12 @@ class FoodCPIForecaster:
         self.series: Optional[pd.Series] = None
         self.model_results: Optional[Any] = None
         self.best_order: Optional[Tuple[int, int, int]] = None
+        # Differencing order selected empirically in Phase B; None until then.
+        self.d: Optional[int] = None
+
+        # Ensure output directories exist before any table/figure is saved
+        os.makedirs(self.cfg.figures_dir, exist_ok=True)
+        os.makedirs(self.cfg.tables_dir, exist_ok=True)
 
         # Set up logging
         logging.basicConfig(
@@ -39,6 +46,12 @@ class FoodCPIForecaster:
     # --------------------------------------------------------------------------
     # Internal Helpers
     # --------------------------------------------------------------------------
+
+    @property
+    def _diff_order(self) -> int:
+        """The differencing order to use: the empirically selected `self.d`
+        (set in Phase B) if available, otherwise the configured fallback."""
+        return self.d if self.d is not None else self.cfg.d
 
     def _save_table(self, df: pd.DataFrame, filename: str):
         path = os.path.join(self.cfg.tables_dir, filename)
@@ -115,14 +128,39 @@ class FoodCPIForecaster:
         values = pd.to_numeric(values, errors='coerce')
 
         # 4. Date Construction
+        #
+        # The NBS sheet only prints a year label on the first month of each
+        # year, so the trailing partial year (e.g. Jan–Oct 2024) has a blank
+        # year cell. A plain forward-fill therefore stamps those months with
+        # the previous year, silently mislabelling them as duplicate dates.
+        #
+        # To recover the true year we track month rollovers (a Dec->Jan style
+        # decrease) and bump a correction offset whenever a rollover occurs
+        # that the forward-filled label did not already account for. This is
+        # self-correcting for any trailing year, with no hardcoded row ranges.
         dates = []
+        prev_month_num = None
+        prev_year_ffill = None
+        year_offset = 0
         for y, m in zip(years, months):
             m_clean = str(m).strip()
             m_num = self.cfg.month_map.get(m_clean, None)
-            if m_num and y > 0:
-                dates.append(f"{y}-{m_num:02d}-01")
-            else:
+
+            if m_num is None or y <= 0:
                 dates.append(np.nan)
+                continue
+
+            if prev_month_num is not None:
+                rolled_over = m_num < prev_month_num
+                ffill_advanced = y != prev_year_ffill
+                if rolled_over and not ffill_advanced:
+                    # A new year began but the sheet carried no label for it.
+                    year_offset += 1
+
+            corrected_year = y + year_offset
+            dates.append(f"{corrected_year}-{m_num:02d}-01")
+            prev_month_num = m_num
+            prev_year_ffill = y
 
         # Filter out rows with invalid dates or values
         valid_mask = pd.notna(dates) & pd.notna(values)
@@ -239,6 +277,26 @@ class FoodCPIForecaster:
                 })
 
         res_df = pd.DataFrame(results).set_index("Order")
+
+        # Empirically select the differencing order via ADF/KPSS unit-root
+        # tests (pmdarima.ndiffs), capped at max_d. The conservative max of the
+        # two tests is used so the series is differenced enough for both.
+        if self.cfg.auto_select_d:
+            try:
+                d_adf = ndiffs(self.series, test="adf", max_d=self.cfg.max_d)
+                d_kpss = ndiffs(self.series, test="kpss", max_d=self.cfg.max_d)
+                self.d = int(max(d_adf, d_kpss))
+                self.logger.info(
+                    f"Phase B: ndiffs selected d={self.d} (ADF={d_adf}, KPSS={d_kpss})"
+                )
+            except Exception as e:
+                self.d = self.cfg.d
+                self.logger.warning(
+                    f"Phase B: ndiffs failed ({e}); falling back to configured d={self.cfg.d}"
+                )
+        else:
+            self.d = self.cfg.d
+
         self._save_table(res_df, "table2_stationarity_tests.csv")
         return res_df
 
@@ -249,8 +307,9 @@ class FoodCPIForecaster:
     def identify_orders(self) -> Dict[str, Any]:
         self.logger.info("Phase C: Generating ACF and PACF correlograms...")
 
-        # Prepare differenced series
-        diff_series = self.series.diff(self.cfg.d).dropna()
+        # Prepare differenced series (using the order selected in Phase B)
+        d = self._diff_order
+        diff_series = self.series.diff(d).dropna()
 
         # Compute ACF/PACF
         acf_vals = acf(diff_series, nlags=self.cfg.acf_nlags)
@@ -262,11 +321,11 @@ class FoodCPIForecaster:
 
         # ACF Plot
         plot_acf(diff_series, lags=self.cfg.acf_nlags, ax=axes[0], alpha=self.cfg.ci_level)
-        axes[0].set_title(f"ACF of Food CPI (d={self.cfg.d})")
+        axes[0].set_title(f"ACF of Food CPI (d={d})")
 
         # PACF Plot
         plot_pacf(diff_series, lags=self.cfg.acf_nlags, ax=axes[1], alpha=self.cfg.ci_level, method=self.cfg.pacf_method)
-        axes[1].set_title(f"PACF of Food CPI (d={self.cfg.d})")
+        axes[1].set_title(f"PACF of Food CPI (d={d})")
 
         self._save_figure(fig, "fig3_acf_pacf_diff.png")
 
@@ -279,20 +338,25 @@ class FoodCPIForecaster:
     def estimate_model(self, auto_optimize: bool = True) -> pd.DataFrame:
         self.logger.info("Phase D: Estimating ARIMA models...")
 
+        # Differencing order selected in Phase B (falls back to config if Phase B
+        # was not run, e.g. a direct estimate_model() call).
+        d = self._diff_order
+
         # 1. Grid Search (Manual Baseline)
         grid_results = []
         for p in range(self.cfg.p_max + 1):
             for q in range(self.cfg.q_max + 1):
                 try:
-                    model = ARIMA(self.series, order=(p, self.cfg.d, q))
+                    model = ARIMA(self.series, order=(p, d, q))
                     res = model.fit()
                     grid_results.append({
-                        "Model": f"ARIMA({p},{self.cfg.d},{q})",
+                        "Model": f"ARIMA({p},{d},{q})",
                         "AIC": res.aic,
                         "BIC": res.bic,
                         "RMSE": np.sqrt(np.mean(res.resid**2))
                     })
-                except:
+                except Exception as e:
+                    self.logger.debug(f"Grid search failed for ARIMA({p},{d},{q}): {e}")
                     continue
 
         grid_df = pd.DataFrame(grid_results).set_index("Model")
@@ -304,7 +368,7 @@ class FoodCPIForecaster:
                 self.series,
                 start_p=0, start_q=0,
                 max_p=self.cfg.p_max, max_q=self.cfg.q_max,
-                d=self.cfg.d,
+                d=d,
                 seasonal=False,
                 stepwise=True,
                 suppress_warnings=True,
@@ -313,8 +377,10 @@ class FoodCPIForecaster:
             self.best_order = auto_model.order
             self.logger.info(f"Auto-ARIMA selected order: {self.best_order}")
         else:
-            # Fallback to manually configured order
-            self.best_order = self.cfg.model_order
+            # Fallback to the manually configured (p, q), but keep the
+            # differencing order consistent with the one used above (d).
+            p_cfg, _, q_cfg = self.cfg.model_order
+            self.best_order = (p_cfg, d, q_cfg)
 
         # Fit the final selected model
         final_model = ARIMA(self.series, order=self.best_order)
@@ -336,7 +402,12 @@ class FoodCPIForecaster:
             self.logger.error("No model has been fitted. Please run estimate_model() first.")
             raise RuntimeError("Model results are missing. You must call estimate_model() before run_diagnostics().")
 
+        # Discard the initial differencing transient so it does not dominate
+        # the residual plot or skew the Ljung-Box / Jarque-Bera statistics.
         residuals = self.model_results.resid
+        burn_in = max(0, int(self.cfg.diagnostic_burn_in))
+        if burn_in and len(residuals) > burn_in:
+            residuals = residuals.iloc[burn_in:]
 
         # Ljung-Box
         lb_results = []

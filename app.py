@@ -140,6 +140,9 @@ if uploaded_file is not None:
                 last_date = forecaster.series.index[-1]
                 config.forecast_start = (last_date + pd.DateOffset(months=1)).strftime('%Y-%m-%d')
 
+                # Phase B selects the differencing order (d) from ADF/KPSS so the
+                # rest of the app uses the data-driven value rather than the default.
+                forecaster.test_stationarity()
                 forecaster.estimate_model(auto_optimize=True)
                 forecaster.generate_forecast(steps=config.forecast_steps)
                 st.session_state.data_loaded = True
@@ -150,9 +153,12 @@ if uploaded_file is not None:
 st.sidebar.markdown("---")
 if st.session_state.get('data_loaded', False):
     st.sidebar.subheader("ARIMA Order (p, d, q)")
+    # Default d to the value Phase B selected from the data, falling back to config.
+    selected_d = forecaster.d if forecaster.d is not None else config.d
     p = st.sidebar.slider("AR Order (p)", 0, config.p_max, 2)
-    d = st.sidebar.number_input("Integration Order (d)", value=config.d, step=1)
+    d = st.sidebar.number_input("Integration Order (d)", value=selected_d, step=1)
     q = st.sidebar.slider("MA Order (q)", 0, config.q_max, 2)
+    st.sidebar.caption(f"Phase B (ADF/KPSS) selected d = {selected_d}")
 
     st.sidebar.subheader("Forecast Settings")
     steps = st.sidebar.slider("Forecast Horizon (Months)", 1, 24, config.forecast_steps)
@@ -161,6 +167,15 @@ if st.session_state.get('data_loaded', False):
     if st.sidebar.button("🚀 Update Model"):
         config.model_order = (p, d, q)
         config.forecast_steps = steps
+        if auto_opt:
+            # Let the pipeline pick d empirically (Phase B / ndiffs).
+            config.auto_select_d = True
+            forecaster.test_stationarity()
+        else:
+            # Honour the manual (p, d, q) the user entered.
+            config.auto_select_d = False
+            config.d = int(d)
+            forecaster.d = int(d)
         forecaster.estimate_model(auto_optimize=auto_opt)
         forecaster.generate_forecast(steps=steps)
         st.sidebar.success("Model Updated!")
@@ -301,10 +316,12 @@ with tab2:
 
     st.markdown("---")
 
-    # Figure 4.3: Second-Differenced Identification
-    st.markdown("**Figure 4.3: ACF and PACF of Second-Differenced Food CPI Series**")
+    # Figure 4.3: Differenced Identification (order selected in Phase B)
+    diff_d = forecaster.d if forecaster.d is not None else config.d
+    ordinal = {1: "First", 2: "Second", 3: "Third"}.get(diff_d, f"{diff_d}th")
+    st.markdown(f"**Figure 4.3: ACF and PACF of {ordinal}-Differenced Food CPI Series (d={diff_d})**")
 
-    diff_series = forecaster.series.diff(1).diff(1).dropna()
+    diff_series = forecaster.series.diff(diff_d).dropna()
     d_acf = acf(diff_series, nlags=20)
     d_pacf = pacf(diff_series, nlags=20)
 

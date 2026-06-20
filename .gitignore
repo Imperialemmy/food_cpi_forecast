@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Generated outputs are committed so figures/tables are visible without
+# re-running the pipeline (kept for the project submission).
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

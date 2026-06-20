@@ -5,7 +5,7 @@ from typing import List, Tuple, Dict
 @dataclass
 class ForecastConfig:
     # -- Paths -----------------------------------------------------------------
-    data_path: str = os.path.join("data", "cpi_1NewDec2024.xlsx")
+    data_path: str = os.path.join("data", "cpi_OCT2024.xlsx")
     figures_dir: str = os.path.join("outputs", "figures")
     tables_dir: str = os.path.join("outputs", "tables")
 
@@ -42,14 +42,24 @@ class ForecastConfig:
 
     # -- Candidate model grid ---------------------------------------------------
     p_max: int = 2
-    d: int = 2
+    d: int = 2                 # Fallback / manual override for the differencing order
     q_max: int = 2
+
+    # When True, Phase B selects d empirically via ADF/KPSS (pmdarima.ndiffs),
+    # capped at max_d, and that value drives identification and estimation.
+    # When False, the hardcoded `d` above is used throughout.
+    auto_select_d: bool = True
+    max_d: int = 2
 
     # -- Selected model ---------------------------------------------------------
     model_order: Tuple[int, int, int] = (2, 2, 2)
 
     # -- Residual diagnostic parameters ------------------------------------------
     ljungbox_lags: List[int] = field(default_factory=lambda: [10, 20])
+    # Number of initial residuals to discard before diagnostics. With d=2 the
+    # first residuals are large initialisation transients that distort the
+    # residual plot and the Ljung-Box / Jarque-Bera tests.
+    diagnostic_burn_in: int = 2
 
     # -- Rolling-origin evaluation parameters ------------------------------------
     eval_start: str = "2022-11-01"

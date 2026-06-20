@@ -23,7 +23,7 @@ def main():
 
         # Phase B: Stationarity testing
         forecaster.test_stationarity()
-        print(f" [Phase B]  Stationarity tests complete. Target differencing: d={config.d}")
+        print(f" [Phase B]  Stationarity tests complete. Selected differencing: d={forecaster._diff_order}")
 
         # Phase C: Identification
         forecaster.identify_orders()
