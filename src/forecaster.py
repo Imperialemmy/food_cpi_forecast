@@ -489,6 +489,7 @@ class FoodCPIForecaster:
         for h in horizons:
             h_actuals = []
             h_preds = []
+            h_targets = []
 
             for origin in eval_indices:
                 train = self.series[:origin]
@@ -505,6 +506,7 @@ class FoodCPIForecaster:
                         y_actual = float(self.series.loc[actual_idx])
                         h_actuals.append(y_actual)
                         h_preds.append(y_pred)
+                        h_targets.append(actual_idx)
                 except Exception as e:
                     self.logger.debug(f"Forecast failed at origin {origin} for horizon {h}: {e}")
                     continue
@@ -520,11 +522,33 @@ class FoodCPIForecaster:
             rmse = np.sqrt(np.mean((h_actuals - h_preds)**2))
             mae = np.mean(np.abs(h_actuals - h_preds))
 
+            # Theil's U inequality coefficient (eq 3.10-3.11): ratio of the
+            # ARIMA RMSE to the seasonal-naive RMSE, where the seasonal-naive
+            # forecast is the value 12 months before the target (same month,
+            # prior year). U < 1 means ARIMA beats the naive benchmark.
+            # Computed on the subset of targets that have a 12-month lag value,
+            # comparing both models over identical points.
+            act_u, arima_u, naive_u = [], [], []
+            for t, ya, yp in zip(h_targets, h_actuals, h_preds):
+                naive_idx = t - pd.DateOffset(months=12)
+                if naive_idx in self.series.index:
+                    act_u.append(ya)
+                    arima_u.append(yp)
+                    naive_u.append(float(self.series.loc[naive_idx]))
+            theil_u = np.nan
+            if naive_u:
+                act_u, arima_u, naive_u = map(np.array, (act_u, arima_u, naive_u))
+                rmse_arima_u = np.sqrt(np.mean((act_u - arima_u) ** 2))
+                rmse_naive_u = np.sqrt(np.mean((act_u - naive_u) ** 2))
+                if rmse_naive_u > 0:
+                    theil_u = rmse_arima_u / rmse_naive_u
+
             horizon_results.append({
                 "Horizon": f"{h} Month(s)",
                 "MAPE (%)": mape,
                 "RMSE": rmse,
-                "MAE": mae
+                "MAE": mae,
+                "Theil U": theil_u
             })
 
         if not horizon_results:
