@@ -1,10 +1,10 @@
 Statistic,Value
-n,24.0
-Mean,112.7417
-Median,112.8
-Standard Deviation,7.2444
-Minimum,100.5
-Maximum,124.1
-Skewness,-0.0799
-Excess Kurtosis,-1.1344
-Coefficient of Variation (%),6.43
+n,180.0
+Mean,324.8121
+Median,246.9958
+Standard Deviation,234.1657
+Minimum,103.9453
+Maximum,1094.6395
+Skewness,1.4701
+Excess Kurtosis,1.5427
+Coefficient of Variation (%),72.09
