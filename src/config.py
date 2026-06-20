@@ -56,6 +56,10 @@ class ForecastConfig:
 
     # -- Residual diagnostic parameters ------------------------------------------
     ljungbox_lags: List[int] = field(default_factory=lambda: [10, 20])
+    # Number of initial residuals to discard before diagnostics. With d=2 the
+    # first residuals are large initialisation transients that distort the
+    # residual plot and the Ljung-Box / Jarque-Bera tests.
+    diagnostic_burn_in: int = 2
 
     # -- Rolling-origin evaluation parameters ------------------------------------
     eval_start: str = "2022-11-01"

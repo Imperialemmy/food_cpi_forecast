@@ -402,7 +402,12 @@ class FoodCPIForecaster:
             self.logger.error("No model has been fitted. Please run estimate_model() first.")
             raise RuntimeError("Model results are missing. You must call estimate_model() before run_diagnostics().")
 
+        # Discard the initial differencing transient so it does not dominate
+        # the residual plot or skew the Ljung-Box / Jarque-Bera statistics.
         residuals = self.model_results.resid
+        burn_in = max(0, int(self.cfg.diagnostic_burn_in))
+        if burn_in and len(residuals) > burn_in:
+            residuals = residuals.iloc[burn_in:]
 
         # Ljung-Box
         lb_results = []
