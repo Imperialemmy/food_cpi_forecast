@@ -321,7 +321,12 @@ with tab2:
     ordinal = {1: "First", 2: "Second", 3: "Third"}.get(diff_d, f"{diff_d}th")
     st.markdown(f"**Figure 4.3: ACF and PACF of {ordinal}-Differenced Food CPI Series (d={diff_d})**")
 
-    diff_series = forecaster.series.diff(diff_d).dropna()
+    # Iterated differencing (true I(d)); series.diff(diff_d) would be the lag-d
+    # difference, a different transform for d >= 2.
+    diff_series = forecaster.series
+    for _ in range(int(diff_d)):
+        diff_series = diff_series.diff()
+    diff_series = diff_series.dropna()
     d_acf = acf(diff_series, nlags=20)
     d_pacf = pacf(diff_series, nlags=20)
 

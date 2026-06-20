@@ -19,7 +19,7 @@ food_cpi_forecast/
 ├── requirements.txt               ← Python dependencies
 ├── README.md                      ← This file
 ├── data/
-│   └── cpi_OCT2024.xlsx           ← NBS source file (place here before running)
+│   └── cpi_1NewDec2024.xlsx       ← NBS source file (Jan 2010 – Dec 2024, n=180)
 ├── src/
 │   ├── config.py                  ← ForecastConfig dataclass (all parameters)
 │   └── forecaster.py              ← FoodCPIForecaster class (Phases A–G as methods)
@@ -45,8 +45,9 @@ pip install -r requirements.txt
 ```
 
 ### 2. Place the NBS data file
-Copy the NBS CPI Excel file into the `data/` folder and update the
-`DATA_FILENAME` variable in `main.py` if the filename differs.
+The NBS CPI Excel file (`cpi_1NewDec2024.xlsx`, covering Jan 2010 – Dec 2024)
+lives in the `data/` folder. To use a different file, update `data_path` in
+`src/config.py`.
 
 ### 3. Run the project
 
