@@ -83,6 +83,7 @@ passed explicitly from `main.py` through to each phase function.
 | File | Description |
 |---|---|
 | `outputs/figures/fig1_level_series.png` | Food CPI time series with structural break annotations |
+| `outputs/figures/fig2_acf_pacf_level.png` | ACF and PACF of the level series (slow decay confirms non-stationarity) |
 | `outputs/figures/fig3_acf_pacf_diff.png` | ACF and PACF of the stationary differenced series |
 | `outputs/figures/fig4_residual_diagnostics.png` | Four-panel residual diagnostic chart |
 | `outputs/figures/fig5_rolling_origin.png` | Walk-forward forecast accuracy decay (MAPE by horizon) |
@@ -93,7 +94,3 @@ passed explicitly from `main.py` through to each phase function.
 | `outputs/tables/table4_ljungbox.csv` | Ljung-Box test results |
 | `outputs/tables/table5_accuracy_metrics.csv` | Walk-forward accuracy metrics (MAPE/RMSE/MAE by horizon) |
 | `outputs/tables/table6_forecast.csv` | 12-month point forecasts and prediction intervals |
-
-> The interactive dashboard (`app.py`) additionally renders the ACF/PACF of the
-> **level** series (Figure 4.2) on its Identification tab; the batch pipeline
-> only saves the differenced correlogram (`fig3`).
