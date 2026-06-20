@@ -377,8 +377,10 @@ class FoodCPIForecaster:
             self.best_order = auto_model.order
             self.logger.info(f"Auto-ARIMA selected order: {self.best_order}")
         else:
-            # Fallback to manually configured order
-            self.best_order = self.cfg.model_order
+            # Fallback to the manually configured (p, q), but keep the
+            # differencing order consistent with the one used above (d).
+            p_cfg, _, q_cfg = self.cfg.model_order
+            self.best_order = (p_cfg, d, q_cfg)
 
         # Fit the final selected model
         final_model = ARIMA(self.series, order=self.best_order)
