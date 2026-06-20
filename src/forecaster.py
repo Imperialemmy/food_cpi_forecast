@@ -522,15 +522,16 @@ class FoodCPIForecaster:
             rmse = np.sqrt(np.mean((h_actuals - h_preds)**2))
             mae = np.mean(np.abs(h_actuals - h_preds))
 
-            # Theil's U inequality coefficient (eq 3.10-3.11): ratio of the
-            # ARIMA RMSE to the seasonal-naive RMSE, where the seasonal-naive
-            # forecast is the value 12 months before the target (same month,
-            # prior year). U < 1 means ARIMA beats the naive benchmark.
-            # Computed on the subset of targets that have a 12-month lag value,
-            # comparing both models over identical points.
+            # Theil's U inequality coefficient (eq 3.11): ratio of the ARIMA
+            # RMSE to the random-walk (no-change) naive RMSE. The naive forecast
+            # for a target h months ahead is the value observed at the forecast
+            # origin (the most recent observation), i.e. the level h months
+            # before the target. U < 1 means ARIMA beats the naive benchmark.
+            # The random-walk benchmark is the classical Theil's U2 reference and
+            # is consistent with the non-seasonal model selected for this series.
             act_u, arima_u, naive_u = [], [], []
             for t, ya, yp in zip(h_targets, h_actuals, h_preds):
-                naive_idx = t - pd.DateOffset(months=12)
+                naive_idx = t - pd.DateOffset(months=h)
                 if naive_idx in self.series.index:
                     act_u.append(ya)
                     arima_u.append(yp)
